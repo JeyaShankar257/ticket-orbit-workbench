@@ -10,33 +10,219 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as R404RouteImport } from './routes/404'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as EmployeeRouteImport } from './routes/employee'
+import { Route as UnauthorizedRouteImport } from './routes/unauthorized'
+import { Route as AdminActivityRouteImport } from './routes/admin.activity'
+import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
+import { Route as AdminEscalationsRouteImport } from './routes/admin.escalations'
+import { Route as AdminProfileRouteImport } from './routes/admin.profile'
+import { Route as AdminTicketsRouteImport } from './routes/admin.tickets'
+import { Route as EmployeeDashboardRouteImport } from './routes/employee.dashboard'
+import { Route as EmployeeProfileRouteImport } from './routes/employee.profile'
+import { Route as EmployeeTicketsRouteImport } from './routes/employee.tickets'
+import { Route as EmployeeTicketsIndexRouteImport } from './routes/employee.tickets.index'
+import { Route as EmployeeTicketsIdRouteImport } from './routes/employee.tickets.$id'
+import { Route as EmployeeTicketsNewRouteImport } from './routes/employee.tickets.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const R404Route = R404RouteImport.update({
+  id: '/404',
+  path: '/404',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmployeeRoute = EmployeeRouteImport.update({
+  id: '/employee',
+  path: '/employee',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnauthorizedRoute = UnauthorizedRouteImport.update({
+  id: '/unauthorized',
+  path: '/unauthorized',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminActivityRoute = AdminActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEscalationsRoute = AdminEscalationsRouteImport.update({
+  id: '/escalations',
+  path: '/escalations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminProfileRoute = AdminProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTicketsRoute = AdminTicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
+  getParentRoute: () => AdminRoute,
+} as any)
+const EmployeeDashboardRoute = EmployeeDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => EmployeeRoute,
+} as any)
+const EmployeeProfileRoute = EmployeeProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => EmployeeRoute,
+} as any)
+const EmployeeTicketsRoute = EmployeeTicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
+  getParentRoute: () => EmployeeRoute,
+} as any)
+const EmployeeTicketsIndexRoute = EmployeeTicketsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EmployeeTicketsRoute,
+} as any)
+const EmployeeTicketsIdRoute = EmployeeTicketsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => EmployeeTicketsRoute,
+} as any)
+const EmployeeTicketsNewRoute = EmployeeTicketsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => EmployeeTicketsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/404': typeof R404Route
+  '/admin': typeof AdminRouteWithChildren
+  '/employee': typeof EmployeeRouteWithChildren
+  '/unauthorized': typeof UnauthorizedRoute
+  '/admin/activity': typeof AdminActivityRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/escalations': typeof AdminEscalationsRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/tickets': typeof AdminTicketsRoute
+  '/employee/dashboard': typeof EmployeeDashboardRoute
+  '/employee/profile': typeof EmployeeProfileRoute
+  '/employee/tickets': typeof EmployeeTicketsRouteWithChildren
+  '/employee/tickets/$id': typeof EmployeeTicketsIdRoute
+  '/employee/tickets/new': typeof EmployeeTicketsNewRoute
+  '/employee/tickets/': typeof EmployeeTicketsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/404': typeof R404Route
+  '/admin': typeof AdminRouteWithChildren
+  '/employee': typeof EmployeeRouteWithChildren
+  '/unauthorized': typeof UnauthorizedRoute
+  '/admin/activity': typeof AdminActivityRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/escalations': typeof AdminEscalationsRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/tickets': typeof AdminTicketsRoute
+  '/employee/dashboard': typeof EmployeeDashboardRoute
+  '/employee/profile': typeof EmployeeProfileRoute
+  '/employee/tickets/$id': typeof EmployeeTicketsIdRoute
+  '/employee/tickets/new': typeof EmployeeTicketsNewRoute
+  '/employee/tickets': typeof EmployeeTicketsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/404': typeof R404Route
+  '/admin': typeof AdminRouteWithChildren
+  '/employee': typeof EmployeeRouteWithChildren
+  '/unauthorized': typeof UnauthorizedRoute
+  '/admin/activity': typeof AdminActivityRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/escalations': typeof AdminEscalationsRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/tickets': typeof AdminTicketsRoute
+  '/employee/dashboard': typeof EmployeeDashboardRoute
+  '/employee/profile': typeof EmployeeProfileRoute
+  '/employee/tickets': typeof EmployeeTicketsRouteWithChildren
+  '/employee/tickets/$id': typeof EmployeeTicketsIdRoute
+  '/employee/tickets/new': typeof EmployeeTicketsNewRoute
+  '/employee/tickets/': typeof EmployeeTicketsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/404'
+    | '/admin'
+    | '/employee'
+    | '/unauthorized'
+    | '/admin/activity'
+    | '/admin/dashboard'
+    | '/admin/escalations'
+    | '/admin/profile'
+    | '/admin/tickets'
+    | '/employee/dashboard'
+    | '/employee/profile'
+    | '/employee/tickets'
+    | '/employee/tickets/$id'
+    | '/employee/tickets/new'
+    | '/employee/tickets/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/404'
+    | '/admin'
+    | '/employee'
+    | '/unauthorized'
+    | '/admin/activity'
+    | '/admin/dashboard'
+    | '/admin/escalations'
+    | '/admin/profile'
+    | '/admin/tickets'
+    | '/employee/dashboard'
+    | '/employee/profile'
+    | '/employee/tickets/$id'
+    | '/employee/tickets/new'
+    | '/employee/tickets'
+  id:
+    | '__root__'
+    | '/'
+    | '/404'
+    | '/admin'
+    | '/employee'
+    | '/unauthorized'
+    | '/admin/activity'
+    | '/admin/dashboard'
+    | '/admin/escalations'
+    | '/admin/profile'
+    | '/admin/tickets'
+    | '/employee/dashboard'
+    | '/employee/profile'
+    | '/employee/tickets'
+    | '/employee/tickets/$id'
+    | '/employee/tickets/new'
+    | '/employee/tickets/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  R404Route: typeof R404Route
+  AdminRoute: typeof AdminRouteWithChildren
+  EmployeeRoute: typeof EmployeeRouteWithChildren
+  UnauthorizedRoute: typeof UnauthorizedRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +234,170 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/404': {
+      id: '/404'
+      path: '/404'
+      fullPath: '/404'
+      preLoaderRoute: typeof R404RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/employee': {
+      id: '/employee'
+      path: '/employee'
+      fullPath: '/employee'
+      preLoaderRoute: typeof EmployeeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/unauthorized': {
+      id: '/unauthorized'
+      path: '/unauthorized'
+      fullPath: '/unauthorized'
+      preLoaderRoute: typeof UnauthorizedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/activity': {
+      id: '/admin/activity'
+      path: '/activity'
+      fullPath: '/admin/activity'
+      preLoaderRoute: typeof AdminActivityRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/escalations': {
+      id: '/admin/escalations'
+      path: '/escalations'
+      fullPath: '/admin/escalations'
+      preLoaderRoute: typeof AdminEscalationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/profile': {
+      id: '/admin/profile'
+      path: '/profile'
+      fullPath: '/admin/profile'
+      preLoaderRoute: typeof AdminProfileRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/tickets': {
+      id: '/admin/tickets'
+      path: '/tickets'
+      fullPath: '/admin/tickets'
+      preLoaderRoute: typeof AdminTicketsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/employee/dashboard': {
+      id: '/employee/dashboard'
+      path: '/dashboard'
+      fullPath: '/employee/dashboard'
+      preLoaderRoute: typeof EmployeeDashboardRouteImport
+      parentRoute: typeof EmployeeRoute
+    }
+    '/employee/profile': {
+      id: '/employee/profile'
+      path: '/profile'
+      fullPath: '/employee/profile'
+      preLoaderRoute: typeof EmployeeProfileRouteImport
+      parentRoute: typeof EmployeeRoute
+    }
+    '/employee/tickets': {
+      id: '/employee/tickets'
+      path: '/tickets'
+      fullPath: '/employee/tickets'
+      preLoaderRoute: typeof EmployeeTicketsRouteImport
+      parentRoute: typeof EmployeeRoute
+    }
+    '/employee/tickets/': {
+      id: '/employee/tickets/'
+      path: '/'
+      fullPath: '/employee/tickets/'
+      preLoaderRoute: typeof EmployeeTicketsIndexRouteImport
+      parentRoute: typeof EmployeeTicketsRoute
+    }
+    '/employee/tickets/$id': {
+      id: '/employee/tickets/$id'
+      path: '/$id'
+      fullPath: '/employee/tickets/$id'
+      preLoaderRoute: typeof EmployeeTicketsIdRouteImport
+      parentRoute: typeof EmployeeTicketsRoute
+    }
+    '/employee/tickets/new': {
+      id: '/employee/tickets/new'
+      path: '/new'
+      fullPath: '/employee/tickets/new'
+      preLoaderRoute: typeof EmployeeTicketsNewRouteImport
+      parentRoute: typeof EmployeeTicketsRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminActivityRoute: typeof AdminActivityRoute
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminEscalationsRoute: typeof AdminEscalationsRoute
+  AdminProfileRoute: typeof AdminProfileRoute
+  AdminTicketsRoute: typeof AdminTicketsRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminActivityRoute: AdminActivityRoute,
+  AdminDashboardRoute: AdminDashboardRoute,
+  AdminEscalationsRoute: AdminEscalationsRoute,
+  AdminProfileRoute: AdminProfileRoute,
+  AdminTicketsRoute: AdminTicketsRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface EmployeeTicketsRouteChildren {
+  EmployeeTicketsIdRoute: typeof EmployeeTicketsIdRoute
+  EmployeeTicketsNewRoute: typeof EmployeeTicketsNewRoute
+  EmployeeTicketsIndexRoute: typeof EmployeeTicketsIndexRoute
+}
+
+const EmployeeTicketsRouteChildren: EmployeeTicketsRouteChildren = {
+  EmployeeTicketsIdRoute: EmployeeTicketsIdRoute,
+  EmployeeTicketsNewRoute: EmployeeTicketsNewRoute,
+  EmployeeTicketsIndexRoute: EmployeeTicketsIndexRoute,
+}
+
+const EmployeeTicketsRouteWithChildren = EmployeeTicketsRoute._addFileChildren(
+  EmployeeTicketsRouteChildren,
+)
+
+interface EmployeeRouteChildren {
+  EmployeeDashboardRoute: typeof EmployeeDashboardRoute
+  EmployeeProfileRoute: typeof EmployeeProfileRoute
+  EmployeeTicketsRoute: typeof EmployeeTicketsRouteWithChildren
+}
+
+const EmployeeRouteChildren: EmployeeRouteChildren = {
+  EmployeeDashboardRoute: EmployeeDashboardRoute,
+  EmployeeProfileRoute: EmployeeProfileRoute,
+  EmployeeTicketsRoute: EmployeeTicketsRouteWithChildren,
+}
+
+const EmployeeRouteWithChildren = EmployeeRoute._addFileChildren(
+  EmployeeRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  R404Route: R404Route,
+  AdminRoute: AdminRouteWithChildren,
+  EmployeeRoute: EmployeeRouteWithChildren,
+  UnauthorizedRoute: UnauthorizedRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
