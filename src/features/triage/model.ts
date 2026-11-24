@@ -9,17 +9,66 @@ export type TicketStatus =
 
 export type TicketPriority = "Low" | "Medium" | "High" | "Critical";
 
+export type TicketCategory =
+  | "Network / VPN"
+  | "Hardware"
+  | "Software / Applications"
+  | "Account / Access"
+  | "Email / Outlook"
+  | "Other";
+
+export type AgentDecision = "SOLUTION_SUGGESTED" | "REQUEST_MORE_INFORMATION" | "ESCALATED";
+
 export type Ticket = {
   id: string;
   title: string;
+  description?: string;
   category: string;
   priority: TicketPriority;
+  risk?: "Low" | "Medium" | "High";
   status: TicketStatus;
+  final_decision?: AgentDecision;
   created: string;
   updated: string;
   employee: string;
   team?: string;
-  risk?: "Low" | "Medium" | "High";
+};
+
+export type TicketMessage = {
+  id: string;
+  ticket_id: string;
+  sender: "user" | "agent" | "human_support";
+  message: string;
+  created_at: string;
+  pii_masked?: boolean;
+};
+
+export type EscalationRecord = {
+  id: string;
+  ticket_id: string;
+  reason: string;
+  assigned_team: string;
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED";
+  created_at: string;
+};
+
+export type AgentRunRecord = {
+  id: string;
+  ticket_id: string;
+  decision: AgentDecision;
+  confidence: number;
+  retrieval_score: number;
+  latency_ms: number;
+  tools_invoked: string[];
+  created_at: string;
+};
+
+export type TicketFeedbackRecord = {
+  id: string;
+  ticket_id: string;
+  rating: number; // 1 to 5
+  feedback: string;
+  created_at: string;
 };
 
 export const statusLabels: Record<TicketStatus, string> = {

@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
 
 import { TriageShell } from "@/features/triage/triage-shell";
 
@@ -7,5 +7,16 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminLayout() {
-  return <TriageShell audience="admin"><Outlet /></TriageShell>;
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // For administrative login, present the dedicated unnested auth barrier
+  if (pathname === "/admin/login") {
+    return <Outlet />;
+  }
+
+  return (
+    <TriageShell audience="admin">
+      <Outlet />
+    </TriageShell>
+  );
 }

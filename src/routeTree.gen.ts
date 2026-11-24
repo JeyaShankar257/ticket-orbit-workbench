@@ -13,10 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as R404RouteImport } from './routes/404'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as EmployeeRouteImport } from './routes/employee'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as UnauthorizedRouteImport } from './routes/unauthorized'
 import { Route as AdminActivityRouteImport } from './routes/admin.activity'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminEscalationsRouteImport } from './routes/admin.escalations'
+import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminProfileRouteImport } from './routes/admin.profile'
 import { Route as AdminTicketsRouteImport } from './routes/admin.tickets'
 import { Route as EmployeeDashboardRouteImport } from './routes/employee.dashboard'
@@ -46,6 +49,16 @@ const EmployeeRoute = EmployeeRouteImport.update({
   path: '/employee',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UnauthorizedRoute = UnauthorizedRouteImport.update({
   id: '/unauthorized',
   path: '/unauthorized',
@@ -64,6 +77,11 @@ const AdminDashboardRoute = AdminDashboardRouteImport.update({
 const AdminEscalationsRoute = AdminEscalationsRouteImport.update({
   id: '/escalations',
   path: '/escalations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminProfileRoute = AdminProfileRouteImport.update({
@@ -112,10 +130,13 @@ export interface FileRoutesByFullPath {
   '/404': typeof R404Route
   '/admin': typeof AdminRouteWithChildren
   '/employee': typeof EmployeeRouteWithChildren
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/unauthorized': typeof UnauthorizedRoute
   '/admin/activity': typeof AdminActivityRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/escalations': typeof AdminEscalationsRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/profile': typeof AdminProfileRoute
   '/admin/tickets': typeof AdminTicketsRoute
   '/employee/dashboard': typeof EmployeeDashboardRoute
@@ -130,10 +151,13 @@ export interface FileRoutesByTo {
   '/404': typeof R404Route
   '/admin': typeof AdminRouteWithChildren
   '/employee': typeof EmployeeRouteWithChildren
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/unauthorized': typeof UnauthorizedRoute
   '/admin/activity': typeof AdminActivityRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/escalations': typeof AdminEscalationsRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/profile': typeof AdminProfileRoute
   '/admin/tickets': typeof AdminTicketsRoute
   '/employee/dashboard': typeof EmployeeDashboardRoute
@@ -148,10 +172,13 @@ export interface FileRoutesById {
   '/404': typeof R404Route
   '/admin': typeof AdminRouteWithChildren
   '/employee': typeof EmployeeRouteWithChildren
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/unauthorized': typeof UnauthorizedRoute
   '/admin/activity': typeof AdminActivityRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/escalations': typeof AdminEscalationsRoute
+  '/admin/login': typeof AdminLoginRoute
   '/admin/profile': typeof AdminProfileRoute
   '/admin/tickets': typeof AdminTicketsRoute
   '/employee/dashboard': typeof EmployeeDashboardRoute
@@ -168,10 +195,13 @@ export interface FileRouteTypes {
     | '/404'
     | '/admin'
     | '/employee'
+    | '/login'
+    | '/register'
     | '/unauthorized'
     | '/admin/activity'
     | '/admin/dashboard'
     | '/admin/escalations'
+    | '/admin/login'
     | '/admin/profile'
     | '/admin/tickets'
     | '/employee/dashboard'
@@ -186,10 +216,13 @@ export interface FileRouteTypes {
     | '/404'
     | '/admin'
     | '/employee'
+    | '/login'
+    | '/register'
     | '/unauthorized'
     | '/admin/activity'
     | '/admin/dashboard'
     | '/admin/escalations'
+    | '/admin/login'
     | '/admin/profile'
     | '/admin/tickets'
     | '/employee/dashboard'
@@ -203,10 +236,13 @@ export interface FileRouteTypes {
     | '/404'
     | '/admin'
     | '/employee'
+    | '/login'
+    | '/register'
     | '/unauthorized'
     | '/admin/activity'
     | '/admin/dashboard'
     | '/admin/escalations'
+    | '/admin/login'
     | '/admin/profile'
     | '/admin/tickets'
     | '/employee/dashboard'
@@ -222,6 +258,8 @@ export interface RootRouteChildren {
   R404Route: typeof R404Route
   AdminRoute: typeof AdminRouteWithChildren
   EmployeeRoute: typeof EmployeeRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
   UnauthorizedRoute: typeof UnauthorizedRoute
 }
 
@@ -255,6 +293,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EmployeeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/unauthorized': {
       id: '/unauthorized'
       path: '/unauthorized'
@@ -281,6 +333,13 @@ declare module '@tanstack/react-router' {
       path: '/escalations'
       fullPath: '/admin/escalations'
       preLoaderRoute: typeof AdminEscalationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/profile': {
@@ -346,6 +405,7 @@ interface AdminRouteChildren {
   AdminActivityRoute: typeof AdminActivityRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminEscalationsRoute: typeof AdminEscalationsRoute
+  AdminLoginRoute: typeof AdminLoginRoute
   AdminProfileRoute: typeof AdminProfileRoute
   AdminTicketsRoute: typeof AdminTicketsRoute
 }
@@ -354,6 +414,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminActivityRoute: AdminActivityRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminEscalationsRoute: AdminEscalationsRoute,
+  AdminLoginRoute: AdminLoginRoute,
   AdminProfileRoute: AdminProfileRoute,
   AdminTicketsRoute: AdminTicketsRoute,
 }
@@ -397,6 +458,8 @@ const rootRouteChildren: RootRouteChildren = {
   R404Route: R404Route,
   AdminRoute: AdminRouteWithChildren,
   EmployeeRoute: EmployeeRouteWithChildren,
+  LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
   UnauthorizedRoute: UnauthorizedRoute,
 }
 export const routeTree = rootRouteImport

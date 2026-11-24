@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -82,10 +83,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "TriageAgent | IT support workspace" },
-      { name: "description", content: "A clear workspace preview for employee support requests and IT operations." },
+      {
+        name: "description",
+        content: "A clear workspace preview for employee support requests and IT operations.",
+      },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "TriageAgent | IT support workspace" },
-      { property: "og:description", content: "A clear workspace preview for employee support requests and IT operations." },
+      {
+        property: "og:description",
+        content: "A clear workspace preview for employee support requests and IT operations.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
@@ -125,6 +132,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster position="top-right" richColors />
     </QueryClientProvider>
   );
 }
