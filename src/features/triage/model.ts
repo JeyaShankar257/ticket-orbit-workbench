@@ -25,7 +25,7 @@ export type Ticket = {
   description?: string;
   category: string;
   priority: TicketPriority;
-  risk?: "Low" | "Medium" | "High";
+  risk?: "Low" | "Medium" | "High" | "Critical" | "Unknown";
   status: TicketStatus;
   final_decision?: AgentDecision;
   created: string;

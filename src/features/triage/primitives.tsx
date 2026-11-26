@@ -31,9 +31,13 @@ export function PageHeading({
     <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary">{eyebrow}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+            {eyebrow}
+          </p>
         ) : null}
-        <h1 className="text-2xl font-semibold leading-tight text-foreground sm:text-3xl">{title}</h1>
+        <h1 className="text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
+          {title}
+        </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
       </div>
       {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
@@ -72,7 +76,12 @@ export function StatusBadge({ status }: { status: TicketStatus }) {
     CLOSED: "border-border bg-muted text-muted-foreground",
   };
   return (
-    <span className={cn("inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium", styles[status])}>
+    <span
+      className={cn(
+        "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+        styles[status],
+      )}
+    >
       <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
       {statusLabels[status]}
     </span>
@@ -86,7 +95,16 @@ export function PriorityBadge({ priority }: { priority: TicketPriority }) {
     High: "border-chart-3/30 bg-chart-3/10 text-foreground",
     Critical: "border-destructive/20 bg-destructive/10 text-destructive",
   };
-  return <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-xs font-medium", styles[priority])}>{priority}</span>;
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full border px-2.5 py-1 text-xs font-medium",
+        styles[priority],
+      )}
+    >
+      {priority}
+    </span>
+  );
 }
 
 export function Metric({
@@ -147,10 +165,21 @@ export function EmptyState({
   );
 }
 
-export function TicketTable({ tickets, showEmployee = false }: { tickets: Ticket[]; showEmployee?: boolean }) {
+export function TicketTable({
+  tickets,
+  showEmployee = false,
+  detailRoute = "/employee/tickets/$id",
+}: {
+  tickets: Ticket[];
+  showEmployee?: boolean;
+  detailRoute?: "/employee/tickets/$id" | "/admin/ticket/$id";
+}) {
   if (tickets.length === 0) {
     return (
-      <EmptyState title="No tickets match" description="Try a different search or adjust the filters above." />
+      <EmptyState
+        title="No tickets match"
+        description="Try a different search or adjust the filters above."
+      />
     );
   }
   return (
@@ -169,24 +198,39 @@ export function TicketTable({ tickets, showEmployee = false }: { tickets: Ticket
         </thead>
         <tbody>
           {tickets.map((ticket) => (
-            <tr key={ticket.id} className="border-b border-border/70 last:border-0 hover:bg-muted/50">
+            <tr
+              key={ticket.id}
+              className="border-b border-border/70 last:border-0 hover:bg-muted/50"
+            >
               <td className="px-4 py-3.5">
-                <Link
-                  to="/employee/tickets/$id"
-                  params={{ id: ticket.id }}
-                  className="group block min-w-48"
-                >
+                <Link to={detailRoute} params={{ id: ticket.id }} className="group block min-w-48">
                   <span className="text-xs font-medium text-muted-foreground">{ticket.id}</span>
-                  <span className="mt-1 block max-w-[280px] truncate font-medium text-foreground group-hover:text-primary">{ticket.title}</span>
+                  <span className="mt-1 block max-w-[280px] truncate font-medium text-foreground group-hover:text-primary">
+                    {ticket.title}
+                  </span>
                 </Link>
               </td>
-              {showEmployee ? <td className="px-4 py-3.5 text-muted-foreground">{ticket.employee}</td> : null}
+              {showEmployee ? (
+                <td className="px-4 py-3.5 text-muted-foreground">{ticket.employee}</td>
+              ) : null}
               <td className="px-4 py-3.5 text-muted-foreground">{ticket.category}</td>
-              <td className="px-4 py-3.5"><PriorityBadge priority={ticket.priority} /></td>
-              <td className="px-4 py-3.5"><StatusBadge status={ticket.status} /></td>
-              <td className="px-4 py-3.5 whitespace-nowrap text-muted-foreground">{ticket.updated}</td>
+              <td className="px-4 py-3.5">
+                <PriorityBadge priority={ticket.priority} />
+              </td>
+              <td className="px-4 py-3.5">
+                <StatusBadge status={ticket.status} />
+              </td>
+              <td className="px-4 py-3.5 whitespace-nowrap text-muted-foreground">
+                {ticket.updated}
+              </td>
               <td className="px-4 py-3.5 text-right">
-                <Button variant="ghost" size="icon" asChild aria-label={`View ${ticket.id}`} title="View ticket">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  asChild
+                  aria-label={`View ${ticket.id}`}
+                  title="View ticket"
+                >
                   <Link to="/employee/tickets/$id" params={{ id: ticket.id }}>
                     <ArrowUpRight />
                   </Link>
@@ -200,7 +244,11 @@ export function TicketTable({ tickets, showEmployee = false }: { tickets: Ticket
   );
 }
 
-export function SearchField({ value, onChange, placeholder = "Search tickets" }: {
+export function SearchField({
+  value,
+  onChange,
+  placeholder = "Search tickets",
+}: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;

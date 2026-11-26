@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
   AlertTriangle,
@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   Menu,
   Plus,
-  ShieldCheck,
   Ticket,
   UserRound,
   LogOut,
@@ -18,7 +17,9 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { getInitials } from "./mappers";
 
 type Audience = "employee" | "admin";
 type NavPath =
@@ -48,16 +49,39 @@ const adminNav: NavItem[] = [
   { label: "My profile", to: "/admin/profile", icon: UserRound, section: "Account" },
 ];
 
+const supportNav: NavItem[] = [
+  { label: "All tickets", to: "/admin/tickets", icon: Ticket, section: "Support" },
+  { label: "Escalations", to: "/admin/escalations", icon: AlertTriangle },
+  { label: "My profile", to: "/admin/profile", icon: UserRound, section: "Account" },
+];
+
 export function TriageShell({ audience, children }: { audience: Audience; children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const isAdmin = audience === "admin";
-  const navItems = isAdmin ? adminNav : employeeNav;
-  const profilePath = isAdmin ? "/admin/profile" : "/employee/profile";
-  const alternatePath = isAdmin ? "/employee/dashboard" : "/admin/dashboard";
-  const alternateLabel = isAdmin ? "Employee preview" : "Admin preview";
+  const navigate = useNavigate();
+  const { user, fullName, role, signOut } = useAuth();
+
+  const isAdminAudience = audience === "admin";
+  const isSupportRole = isAdminAudience && role === "support";
+  const navItems = !isAdminAudience ? employeeNav : isSupportRole ? supportNav : adminNav;
+  const homePath: NavPath = !isAdminAudience
+    ? "/employee/dashboard"
+    : isSupportRole
+      ? "/admin/tickets"
+      : "/admin/dashboard";
+  const profilePath: NavPath = isAdminAudience ? "/admin/profile" : "/employee/profile";
+  const displayName = fullName ?? user?.email ?? (isAdminAudience ? "Operator" : "Employee");
+  const initials = getInitials(displayName);
+  const roleLabel =
+    role === "admin" ? "IT administrator" : role === "support" ? "IT support" : "Employee";
+  const sectionHeader = !isAdminAudience ? "Workspace" : isSupportRole ? "Support" : "Operations";
+
+  const handleSignOut = async () => {
+    await signOut();
+    await navigate({ to: "/login" });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground md:flex">
@@ -75,7 +99,7 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
           )}
         >
           <Link
-            to={isAdmin ? "/admin/dashboard" : "/employee/dashboard"}
+            to={homePath}
             className="flex min-w-0 items-center gap-3"
             onClick={() => setMobileOpen(false)}
           >
@@ -107,17 +131,18 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
         <div className={cn("px-3 pt-6", collapsed && "md:px-2")}>
           {!collapsed ? (
             <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-              {isAdmin ? "Operations" : "Workspace"}
+              {sectionHeader}
             </p>
           ) : null}
           <nav aria-label="Main navigation" className="space-y-1">
             {navItems.map((item) => {
               const active =
                 pathname === item.to ||
-                (item.to === "/employee/tickets" && pathname.startsWith("/employee/tickets"));
+                (item.to === "/employee/tickets" && pathname.startsWith("/employee/tickets")) ||
+                (item.to === "/admin/tickets" && pathname.startsWith("/admin/ticket/"));
               return (
                 <div key={item.to}>
-                  {item.section && item.section !== (isAdmin ? "Operations" : "Workspace") ? (
+                  {item.section && item.section !== sectionHeader ? (
                     !collapsed ? (
                       <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
                         {item.section}
@@ -155,26 +180,14 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
           {!collapsed ? (
             <div className="mb-3 px-2.5 py-2">
               <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-foreground">
-                <span className="size-2 rounded-full bg-chart-3" aria-hidden="true" />
-                Preview environment
+                <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                Live workspace
               </div>
               <p className="text-xs leading-5 text-muted-foreground">
-                Sample records only. Nothing here is connected to a live service.
+                Connected to TriageAgent API with Supabase authentication.
               </p>
             </div>
           ) : null}
-          <Button
-            variant="outline"
-            size={collapsed ? "icon" : "sm"}
-            className={cn("w-full bg-transparent", collapsed && "md:mx-auto")}
-            asChild
-            title={alternateLabel}
-          >
-            <Link to={alternatePath}>
-              <ShieldCheck className="size-4" />
-              {!collapsed ? <span>Switch to {alternateLabel.toLowerCase()}</span> : null}
-            </Link>
-          </Button>
           <Button
             variant="ghost"
             size={collapsed ? "icon" : "sm"}
@@ -182,13 +195,11 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
               "mt-1.5 w-full text-muted-foreground hover:text-foreground",
               collapsed && "md:mx-auto",
             )}
-            asChild
+            onClick={() => void handleSignOut()}
             title="Sign out"
           >
-            <Link to={isAdmin ? "/admin/login" : "/login"}>
-              <LogOut className="size-4" />
-              {!collapsed ? <span>Sign out</span> : null}
-            </Link>
+            <LogOut className="size-4" />
+            {!collapsed ? <span>Sign out</span> : null}
           </Button>
         </div>
       </aside>
@@ -224,13 +235,17 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
             </Button>
             <span className="hidden h-5 w-px bg-border sm:block" />
             <span className="truncate text-sm font-medium text-muted-foreground">
-              {isAdmin ? "Operations center" : "Employee workspace"}
+              {!isAdminAudience
+                ? "Employee workspace"
+                : isSupportRole
+                  ? "Support workspace"
+                  : "Operations center"}
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <span className="hidden items-center gap-1.5 rounded-full border border-chart-3/30 bg-chart-3/10 px-2.5 py-1 text-[11px] font-semibold text-foreground sm:inline-flex">
-              <span className="size-1.5 rounded-full bg-chart-3" aria-hidden="true" />
-              Demo mode
+            <span className="hidden items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary sm:inline-flex">
+              <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+              Live
             </span>
             <div className="relative">
               <Button
@@ -246,7 +261,7 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
                 <div className="absolute right-0 top-12 z-50 w-[min(300px,calc(100vw-2rem))] rounded-md border border-border bg-popover p-4 shadow-lg">
                   <p className="text-sm font-semibold">All caught up</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Notifications will appear here when a live workspace is connected.
+                    No new notifications.
                   </p>
                 </div>
               ) : null}
@@ -257,14 +272,12 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
               className="flex items-center gap-2.5 rounded-md py-1 pl-1 pr-0.5 hover:bg-muted sm:pr-2"
             >
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
-                {isAdmin ? "CM" : "ML"}
+                {initials}
               </span>
               <span className="hidden text-left sm:block">
-                <span className="block text-xs font-semibold leading-4">
-                  {isAdmin ? "Casey Morgan" : "Morgan Lee"}
-                </span>
+                <span className="block text-xs font-semibold leading-4">{displayName}</span>
                 <span className="block text-[10px] leading-4 text-muted-foreground">
-                  {isAdmin ? "IT administrator" : "Employee"}
+                  {roleLabel}
                 </span>
               </span>
               <ChevronDown
@@ -278,7 +291,7 @@ export function TriageShell({ audience, children }: { audience: Audience; childr
         <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 sm:py-8 lg:px-9 lg:py-9">
           {children}
           <footer className="mt-12 border-t border-border pt-4 text-center text-[11px] text-muted-foreground">
-            TriageAgent · Frontend preview · Sample content is illustrative
+            TriageAgent · Support &amp; Operations Workbench
           </footer>
         </main>
       </div>

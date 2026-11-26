@@ -25,6 +25,7 @@ import { Route as AdminTicketsRouteImport } from './routes/admin.tickets'
 import { Route as EmployeeDashboardRouteImport } from './routes/employee.dashboard'
 import { Route as EmployeeProfileRouteImport } from './routes/employee.profile'
 import { Route as EmployeeTicketsRouteImport } from './routes/employee.tickets'
+import { Route as AdminTicketIdRouteImport } from './routes/admin.ticket.$id'
 import { Route as EmployeeTicketsIndexRouteImport } from './routes/employee.tickets.index'
 import { Route as EmployeeTicketsIdRouteImport } from './routes/employee.tickets.$id'
 import { Route as EmployeeTicketsNewRouteImport } from './routes/employee.tickets.new'
@@ -109,6 +110,11 @@ const EmployeeTicketsRoute = EmployeeTicketsRouteImport.update({
   path: '/tickets',
   getParentRoute: () => EmployeeRoute,
 } as any)
+const AdminTicketIdRoute = AdminTicketIdRouteImport.update({
+  id: '/ticket/$id',
+  path: '/ticket/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
 const EmployeeTicketsIndexRoute = EmployeeTicketsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -142,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/employee/dashboard': typeof EmployeeDashboardRoute
   '/employee/profile': typeof EmployeeProfileRoute
   '/employee/tickets': typeof EmployeeTicketsRouteWithChildren
+  '/admin/ticket/$id': typeof AdminTicketIdRoute
   '/employee/tickets/$id': typeof EmployeeTicketsIdRoute
   '/employee/tickets/new': typeof EmployeeTicketsNewRoute
   '/employee/tickets/': typeof EmployeeTicketsIndexRoute
@@ -162,6 +169,7 @@ export interface FileRoutesByTo {
   '/admin/tickets': typeof AdminTicketsRoute
   '/employee/dashboard': typeof EmployeeDashboardRoute
   '/employee/profile': typeof EmployeeProfileRoute
+  '/admin/ticket/$id': typeof AdminTicketIdRoute
   '/employee/tickets/$id': typeof EmployeeTicketsIdRoute
   '/employee/tickets/new': typeof EmployeeTicketsNewRoute
   '/employee/tickets': typeof EmployeeTicketsIndexRoute
@@ -184,6 +192,7 @@ export interface FileRoutesById {
   '/employee/dashboard': typeof EmployeeDashboardRoute
   '/employee/profile': typeof EmployeeProfileRoute
   '/employee/tickets': typeof EmployeeTicketsRouteWithChildren
+  '/admin/ticket/$id': typeof AdminTicketIdRoute
   '/employee/tickets/$id': typeof EmployeeTicketsIdRoute
   '/employee/tickets/new': typeof EmployeeTicketsNewRoute
   '/employee/tickets/': typeof EmployeeTicketsIndexRoute
@@ -207,6 +216,7 @@ export interface FileRouteTypes {
     | '/employee/dashboard'
     | '/employee/profile'
     | '/employee/tickets'
+    | '/admin/ticket/$id'
     | '/employee/tickets/$id'
     | '/employee/tickets/new'
     | '/employee/tickets/'
@@ -227,6 +237,7 @@ export interface FileRouteTypes {
     | '/admin/tickets'
     | '/employee/dashboard'
     | '/employee/profile'
+    | '/admin/ticket/$id'
     | '/employee/tickets/$id'
     | '/employee/tickets/new'
     | '/employee/tickets'
@@ -248,6 +259,7 @@ export interface FileRouteTypes {
     | '/employee/dashboard'
     | '/employee/profile'
     | '/employee/tickets'
+    | '/admin/ticket/$id'
     | '/employee/tickets/$id'
     | '/employee/tickets/new'
     | '/employee/tickets/'
@@ -377,6 +389,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EmployeeTicketsRouteImport
       parentRoute: typeof EmployeeRoute
     }
+    '/admin/ticket/$id': {
+      id: '/admin/ticket/$id'
+      path: '/ticket/$id'
+      fullPath: '/admin/ticket/$id'
+      preLoaderRoute: typeof AdminTicketIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/employee/tickets/': {
       id: '/employee/tickets/'
       path: '/'
@@ -408,6 +427,7 @@ interface AdminRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   AdminProfileRoute: typeof AdminProfileRoute
   AdminTicketsRoute: typeof AdminTicketsRoute
+  AdminTicketIdRoute: typeof AdminTicketIdRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
@@ -417,6 +437,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   AdminProfileRoute: AdminProfileRoute,
   AdminTicketsRoute: AdminTicketsRoute,
+  AdminTicketIdRoute: AdminTicketIdRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)

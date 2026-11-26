@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { format, isValid, parseISO } from "date-fns";
 import {
+  AlertCircle,
   ArrowRight,
   ArrowUpRight,
   Bot,
-  Check,
   CheckCircle2,
   CircleHelp,
   Clock3,
@@ -12,12 +13,12 @@ import {
   Laptop,
   LogOut,
   Plus,
+  RefreshCw,
   Search,
   Send,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
-  Star,
   Ticket,
   Wifi,
 } from "lucide-react";
@@ -33,13 +34,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { demoFeedback, demoTicketMessages, demoTickets } from "./demo-data";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  useAnalyzeTicket,
+  useAssignEscalation,
+  useCreateTicket,
+  useResolveTicket,
+  useSendTicketMessage,
+  useStaffAssignees,
+  useTicket,
+  useTicketAgentRuns,
+  useTicketEscalation,
+  useTicketMessages,
+  useTickets,
+  useUpdateTicketStatus,
+} from "@/lib/api";
+import type { TicketAnalyzeResponse } from "@/lib/api/types";
+import {
+  getInitials,
+  mapBackendMessageToDisplay,
+  mapBackendTicketToDisplay,
+  toBackendCategory,
+} from "./mappers";
 import {
   EmptyState,
   Metric,
   PageHeading,
-  PreviewNotice,
   PriorityBadge,
   SectionTitle,
   StatusBadge,
@@ -53,16 +75,56 @@ import {
   type TicketStatus,
 } from "./model";
 
+function LiveErrorBanner({
+  title = "Unable to load data",
+  message,
+  onRetry,
+}: {
+  title?: string;
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex items-start gap-2.5">
+        <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+        <div>
+          <p className="font-semibold text-foreground">{title}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{message}</p>
+        </div>
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry} className="shrink-0">
+        <RefreshCw className="mr-1.5 size-3.5" />
+        Retry
+      </Button>
+    </div>
+  );
+}
+
 export function EmployeeDashboard() {
+  const { fullName, user } = useAuth();
+  const { data, isLoading, isError, error, refetch } = useTickets();
+  const employeeLabel = fullName ?? user?.email ?? "You";
+  const greetingName = fullName ?? user?.email?.split("@")[0] ?? "there";
+
+  const tickets = (data ?? []).map((t) => mapBackendTicketToDisplay(t, employeeLabel));
+  const inProgressTickets = tickets.filter((t) =>
+    ["NEW", "ANALYZING", "ESCALATED"].includes(t.status),
+  );
+  const waitingTickets = tickets.filter((t) =>
+    ["WAITING_FOR_USER", "SOLUTION_SUGGESTED"].includes(t.status),
+  );
+  const resolvedTickets = tickets.filter((t) => ["RESOLVED", "CLOSED"].includes(t.status));
+  const pulseTickets = tickets.filter((t) => t.status !== "CLOSED").slice(0, 2);
+
   return (
     <>
-      <PreviewNotice>
-        You're viewing a sample workspace. Ticket counts and updates are illustrative, not live
-        records.
-      </PreviewNotice>
       <PageHeading
-        eyebrow="Tuesday · employee workspace"
-        title="Good morning, Morgan"
+        eyebrow="Employee workspace"
+        title={`Good day, ${greetingName}`}
         description="Your support requests, all in one place. We're here to keep your day moving."
         actions={
           <Button asChild>
@@ -73,23 +135,44 @@ export function EmployeeDashboard() {
           </Button>
         }
       />
+
+      {isError && (
+        <div className="mb-6">
+          <LiveErrorBanner
+            title="Unable to load your tickets"
+            message={error?.message ?? "Please check your connection and try again."}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
+
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Total requests" value="06" note="Across all statuses" icon={Ticket} />
+        <Metric
+          label="Total requests"
+          value={isLoading ? "—" : String(tickets.length).padStart(2, "0")}
+          note="Across all statuses"
+          icon={Ticket}
+        />
         <Metric
           label="In progress"
-          value="02"
-          note="Being reviewed by support"
+          value={isLoading ? "—" : String(inProgressTickets.length).padStart(2, "0")}
+          note="Being reviewed or escalated"
           icon={Clock3}
           tone="blue"
         />
         <Metric
           label="Waiting for you"
-          value="01"
-          note="A response may be needed"
+          value={isLoading ? "—" : String(waitingTickets.length).padStart(2, "0")}
+          note="Clarification or solution ready"
           icon={CircleHelp}
           tone="warning"
         />
-        <Metric label="Resolved" value="01" note="Recently completed" icon={CheckCircle2} />
+        <Metric
+          label="Resolved"
+          value={isLoading ? "—" : String(resolvedTickets.length).padStart(2, "0")}
+          note="Completed requests"
+          icon={CheckCircle2}
+        />
       </div>
 
       <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.8fr)]">
@@ -106,7 +189,17 @@ export function EmployeeDashboard() {
               </Button>
             }
           />
-          <TicketTable tickets={demoTickets.slice(0, 4)} />
+          {isLoading ? (
+            <div className="space-y-3 py-2">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : tickets.length === 0 && !isError ? (
+            <TicketListEmpty />
+          ) : (
+            <TicketTable tickets={tickets.slice(0, 4)} />
+          )}
         </div>
         <div className="rounded-md border border-border bg-card p-5 sm:p-6">
           <div className="mb-4 flex items-start justify-between gap-3">
@@ -121,30 +214,38 @@ export function EmployeeDashboard() {
             </span>
           </div>
           <p className="text-sm leading-6 text-muted-foreground">
-            Two requests are moving through the support process. One is waiting for a reply from
-            you.
+            {isLoading
+              ? "Loading your latest ticket updates..."
+              : tickets.length === 0
+                ? "You have no active requests yet. Create a ticket whenever you need IT help."
+                : `${inProgressTickets.length} request(s) in progress and ${waitingTickets.length} waiting for your review.`}
           </p>
           <div className="mt-5 space-y-4">
-            <div className="flex items-center gap-3 border-t border-border pt-4">
-              <span className="grid size-9 place-items-center rounded-md bg-chart-2/10 text-chart-2">
-                <Laptop className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">VPN connection</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Latest update · 12 min ago</p>
-              </div>
-              <StatusBadge status="ANALYZING" />
-            </div>
-            <div className="flex items-center gap-3 border-t border-border pt-4">
-              <span className="grid size-9 place-items-center rounded-md bg-chart-3/15 text-foreground">
-                <FileText className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">Shared drive access</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Latest update · 38 min ago</p>
-              </div>
-              <StatusBadge status="WAITING_FOR_USER" />
-            </div>
+            {pulseTickets.map((item, index) => (
+              <Link
+                key={item.id}
+                to="/employee/tickets/$id"
+                params={{ id: item.id }}
+                className="flex items-center gap-3 border-t border-border pt-4 hover:opacity-80"
+              >
+                <span
+                  className={
+                    index === 0
+                      ? "grid size-9 place-items-center rounded-md bg-chart-2/10 text-chart-2"
+                      : "grid size-9 place-items-center rounded-md bg-chart-3/15 text-foreground"
+                  }
+                >
+                  {index === 0 ? <Laptop className="size-4" /> : <FileText className="size-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Latest update · {item.updated}
+                  </p>
+                </div>
+                <StatusBadge status={item.status} />
+              </Link>
+            ))}
           </div>
           <Link
             to="/employee/tickets"
@@ -161,7 +262,7 @@ export function EmployeeDashboard() {
           <div>
             <h2 className="text-base font-semibold">Need a hand?</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Tell us what's going on and we'll get the right support moving.
+              Tell us what&apos;s going on and we&apos;ll get the right support moving.
             </p>
           </div>
           <Button variant="outline" asChild>
@@ -177,10 +278,16 @@ export function EmployeeDashboard() {
 }
 
 export function EmployeeTickets() {
+  const { fullName, user } = useAuth();
+  const { data, isLoading, isError, error, refetch } = useTickets();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [priority, setPriority] = useState("all");
-  const filtered = demoTickets.filter((ticket) => {
+
+  const employeeLabel = fullName ?? user?.email ?? "You";
+  const tickets = (data ?? []).map((t) => mapBackendTicketToDisplay(t, employeeLabel));
+
+  const filtered = tickets.filter((ticket) => {
     const matchesQuery = `${ticket.id} ${ticket.title}`.toLowerCase().includes(query.toLowerCase());
     return (
       matchesQuery &&
@@ -188,12 +295,9 @@ export function EmployeeTickets() {
       (priority === "all" || ticket.priority === priority)
     );
   });
+
   return (
     <>
-      <PreviewNotice>
-        These sample tickets are included to preview the interface. No personal ticket data is
-        connected.
-      </PreviewNotice>
       <PageHeading
         eyebrow="Employee workspace"
         title="My tickets"
@@ -207,6 +311,17 @@ export function EmployeeTickets() {
           </Button>
         }
       />
+
+      {isError && (
+        <div className="mb-4">
+          <LiveErrorBanner
+            title="Unable to load tickets"
+            message={error?.message ?? "Please try again."}
+            onRetry={() => void refetch()}
+          />
+        </div>
+      )}
+
       <div className="rounded-md border border-border bg-card">
         <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:max-w-xs">
@@ -248,9 +363,21 @@ export function EmployeeTickets() {
             </Select>
           </div>
         </div>
-        <TicketTable tickets={filtered} />
+
+        {isLoading ? (
+          <div className="space-y-3 p-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : tickets.length === 0 && !isError ? (
+          <TicketListEmpty />
+        ) : (
+          <TicketTable tickets={filtered} />
+        )}
+
         <div className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
-          Showing {filtered.length} of {demoTickets.length} sample tickets
+          Showing {filtered.length} of {tickets.length} tickets
         </div>
       </div>
     </>
@@ -273,22 +400,39 @@ const priorities: { value: TicketPriority; description: string }[] = [
 ];
 
 export function NewTicket() {
+  const navigate = useNavigate();
+  const createTicketMutation = useCreateTicket();
   const [selectedPriority, setSelectedPriority] = useState<TicketPriority>("Medium");
-  const [previewReady, setPreviewReady] = useState(false);
   const [error, setError] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState(categories[0] ?? "Other");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (title.trim().length < 4 || description.trim().length < 20) {
-      setError("Add a clear title and at least 20 characters describing the issue.");
-      setPreviewReady(false);
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim();
+
+    if (trimmedTitle.length < 5 || trimmedDescription.length < 10) {
+      setError("Add a title (at least 5 characters) and description (at least 10 characters).");
       return;
     }
+
     setError("");
-    setPreviewReady(true);
+    try {
+      const created = await createTicketMutation.mutateAsync({
+        title: trimmedTitle,
+        description: trimmedDescription,
+        category: toBackendCategory(category),
+        reported_priority: selectedPriority,
+      });
+      toast.success("Support ticket created!");
+      await navigate({ to: "/employee/tickets/$id", params: { id: created.ticket_id } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to create ticket.";
+      setError(msg);
+      toast.error(msg);
+    }
   }
 
   return (
@@ -322,8 +466,8 @@ export function NewTicket() {
               <Input
                 id="ticket-title"
                 required
-                minLength={4}
-                maxLength={120}
+                minLength={5}
+                maxLength={150}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="For example, VPN disconnects during calls"
@@ -337,8 +481,8 @@ export function NewTicket() {
               <Textarea
                 id="ticket-description"
                 required
-                minLength={20}
-                maxLength={2000}
+                minLength={10}
+                maxLength={3000}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Tell us what you were trying to do, what happened instead, and when you first noticed the issue."
@@ -394,24 +538,22 @@ export function NewTicket() {
                 {error}
               </p>
             ) : null}
-            {previewReady ? (
-              <div
-                className="rounded-md border border-chart-3/30 bg-chart-3/10 px-4 py-3 text-sm"
-                role="status"
-              >
-                <p className="font-semibold">Your request preview is ready.</p>
-                <p className="mt-1 text-muted-foreground">
-                  This frontend preview cannot submit or save a ticket. Nothing was sent.
-                </p>
-              </div>
-            ) : null}
             <div className="flex flex-col-reverse gap-2 border-t border-border pt-5 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" asChild>
                 <Link to="/employee/dashboard">Cancel</Link>
               </Button>
-              <Button type="submit">
-                Preview request
-                <ArrowRight />
+              <Button type="submit" disabled={createTicketMutation.isPending}>
+                {createTicketMutation.isPending ? (
+                  <>
+                    <span className="size-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    Submit ticket
+                    <ArrowRight />
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -434,79 +576,230 @@ export function NewTicket() {
               ))}
             </div>
           </div>
-          <PreviewNotice>
-            Submitting is disabled in this preview. A live support service is not connected.
-          </PreviewNotice>
         </aside>
       </div>
     </>
   );
 }
 
-export function TicketDetails({ id }: { id: string }) {
-  const initialTicket = demoTickets.find((item) => item.id === id) ?? demoTickets[0];
-  const [ticket, setTicket] = useState(initialTicket);
-  const [messages, setMessages] = useState(demoTicketMessages[id] ?? []);
+const AUTO_ANALYZE_STATUSES: ReadonlySet<TicketStatus> = new Set([
+  "NEW",
+  "WAITING_FOR_USER",
+  "SOLUTION_SUGGESTED",
+  "ESCALATED",
+]);
+
+const initialAutoAnalyzedTickets = new Set<string>();
+
+export function TicketDetails({
+  id,
+  backTo = "/employee/tickets",
+}: {
+  id: string;
+  backTo?: "/employee/tickets" | "/admin/tickets";
+}) {
+  const { fullName, user, role } = useAuth();
+  const ticketQuery = useTicket(id);
+  const messagesQuery = useTicketMessages(id);
+  const sendMessageMutation = useSendTicketMessage(id);
+  const analyzeMutation = useAnalyzeTicket(id);
+  const resolveMutation = useResolveTicket(id);
+
   const [replyText, setReplyText] = useState("");
-  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
-  const [rating, setRating] = useState(5);
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [latestAnalysis, setLatestAnalysis] = useState<TicketAnalyzeResponse | null>(null);
+  const replyInFlightRef = useRef(false);
+  const analyzeInFlightRef = useRef(false);
+  const resolveInFlightRef = useRef(false);
+  const autoAnalyzedTicketIdRef = useRef<string | null>(null);
 
-  if (!ticket)
+  const currentUserLabel = fullName ?? user?.email ?? "You";
+  const userInitials = getInitials(currentUserLabel);
+
+  const handleAnalyzeTicket = async () => {
+    if (analyzeMutation.isPending || analyzeInFlightRef.current) return;
+    analyzeInFlightRef.current = true;
+    try {
+      const result = await analyzeMutation.mutateAsync();
+      setLatestAnalysis(result);
+      if (result.decision_source === "groq" || result.decision_source === "fallback") {
+        toast.warning(
+          `Fallback analysis (Groq) – Gemini unavailable. Decision: ${result.decision}`,
+        );
+      } else {
+        toast.success(`AI analysis complete: ${result.decision}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "AI analysis failed. Please try again.";
+      toast.error(msg);
+    } finally {
+      analyzeInFlightRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const raw = ticketQuery.data;
+    if (!raw || messagesQuery.isLoading || messagesQuery.isError) return;
+    const isTicketOwner = raw.user_id === user?.id;
+    const hasMessages = (messagesQuery.data?.length ?? 0) > 0;
+    if (
+      isTicketOwner &&
+      raw.status === "NEW" &&
+      !hasMessages &&
+      autoAnalyzedTicketIdRef.current !== raw.id &&
+      !initialAutoAnalyzedTickets.has(raw.id)
+    ) {
+      autoAnalyzedTicketIdRef.current = raw.id;
+      initialAutoAnalyzedTickets.add(raw.id);
+      void handleAnalyzeTicket();
+    }
+  }, [
+    ticketQuery.data,
+    messagesQuery.data,
+    messagesQuery.isLoading,
+    messagesQuery.isError,
+    user?.id,
+  ]);
+
+  if (ticketQuery.isLoading) {
     return (
-      <EmptyState
-        title="Ticket not found"
-        description="This sample ticket is not part of the preview data."
-      />
+      <div className="space-y-5">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-24 w-full" />
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(310px,0.8fr)]">
+          <Skeleton className="h-72 w-full" />
+          <Skeleton className="h-56 w-full" />
+        </div>
+      </div>
     );
+  }
 
-  const handleSendClarification = (e: FormEvent) => {
-    e.preventDefault();
-    if (!replyText.trim()) return;
+  if (ticketQuery.isError) {
+    if (ticketQuery.error?.status === 404) {
+      return (
+        <EmptyState
+          title="Ticket not found"
+          description="This ticket does not exist or you do not have access to view it."
+          action={
+            <Button asChild variant="outline">
+              <Link to={backTo}>Back to tickets</Link>
+            </Button>
+          }
+        />
+      );
+    }
 
-    const newMsg = {
-      id: `msg-${Date.now()}`,
-      ticket_id: ticket.id,
-      sender: "user" as const,
-      message: replyText.trim(),
-      created_at: "Just now",
-    };
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" asChild className="px-2">
+          <Link to={backTo}>
+            <ArrowRight className="rotate-180" />
+            Back to tickets
+          </Link>
+        </Button>
+        <LiveErrorBanner
+          title="Unable to load ticket"
+          message={ticketQuery.error?.message ?? "Please try again."}
+          onRetry={() => void ticketQuery.refetch()}
+        />
+      </div>
+    );
+  }
 
-    setMessages((prev) => [...prev, newMsg]);
-    setReplyText("");
-    setIsSubmittingReply(true);
+  const rawTicket = ticketQuery.data;
+  if (!rawTicket) {
+    return <EmptyState title="Ticket not found" description="This ticket could not be loaded." />;
+  }
 
-    toast.info("Clarification submitted. PII masking active.");
+  const isOwner = rawTicket.user_id === user?.id;
+  const ticket = mapBackendTicketToDisplay(rawTicket, isOwner ? currentUserLabel : undefined);
+  const messages = (messagesQuery.data ?? []).map(mapBackendMessageToDisplay);
+  const canAnalyze = ticket.status !== "RESOLVED" && ticket.status !== "CLOSED";
+  const isAdminOrSupportView = backTo === "/admin/tickets" || !isOwner;
+  const showManualAnalyze = canAnalyze && (isAdminOrSupportView || messages.length === 0);
+  const shouldAutoAnalyze = isOwner && AUTO_ANALYZE_STATUSES.has(ticket.status);
+  const isReplyBusy =
+    sendMessageMutation.isPending || analyzeMutation.isPending || resolveMutation.isPending;
+  const showResolutionActions =
+    isOwner && !isAdminOrSupportView && ticket.status === "SOLUTION_SUGGESTED";
+  const isStaffView = backTo === "/admin/tickets" && (role === "admin" || role === "support");
 
-    setTimeout(() => {
-      setIsSubmittingReply(false);
-      const agentReply = {
-        id: `msg-${Date.now() + 1}`,
-        ticket_id: ticket.id,
-        sender: "agent" as const,
+  const handleConfirmResolved = async () => {
+    if (resolveMutation.isPending || isReplyBusy || resolveInFlightRef.current) return;
+    resolveInFlightRef.current = true;
+    try {
+      await resolveMutation.mutateAsync({
+        rating: 5,
+        feedback: "Employee confirmed issue resolved.",
+      });
+      toast.success("Ticket marked as resolved. Thank you for confirming!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to mark ticket as resolved.";
+      toast.error(msg);
+    } finally {
+      resolveInFlightRef.current = false;
+    }
+  };
+
+  const handleReportUnresolved = async () => {
+    if (isReplyBusy || replyInFlightRef.current) return;
+    replyInFlightRef.current = true;
+    try {
+      await sendMessageMutation.mutateAsync({
         message:
-          "Clarification received. The agent workflow has resumed context analysis and is querying the ChromaDB knowledge base for matching solutions.",
-        created_at: "Just now",
-      };
-      setMessages((prev) => [...prev, agentReply]);
-      toast.success("Agent re-evaluated ticket context.");
-    }, 1000);
+          "The suggested solution did not resolve my issue. Please investigate further or escalate.",
+      });
+      toast.success("Feedback sent. Requesting further AI investigation...");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to send feedback.";
+      toast.error(msg);
+      replyInFlightRef.current = false;
+      return;
+    }
+
+    try {
+      await handleAnalyzeTicket();
+    } finally {
+      replyInFlightRef.current = false;
+    }
   };
 
-  const handleConfirmResolution = () => {
-    setTicket((prev) => (prev ? { ...prev, status: "RESOLVED" } : prev));
-    toast.success("Ticket confirmed as RESOLVED. Thank you for closing the loop!");
+  const handleManualAnalyzeTicket = () => {
+    if (isReplyBusy || replyInFlightRef.current) return;
+    void handleAnalyzeTicket();
   };
 
-  const handleFeedbackSubmit = () => {
-    setFeedbackSubmitted(true);
-    toast.success("Feedback recorded in Supabase PostgreSQL!");
+  const handleSendClarification = async (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = replyText.trim();
+    if (!trimmed || isReplyBusy || replyInFlightRef.current) return;
+
+    replyInFlightRef.current = true;
+    try {
+      await sendMessageMutation.mutateAsync({ message: trimmed });
+      setReplyText("");
+      toast.success(
+        shouldAutoAnalyze ? "Message sent. Requesting AI follow-up..." : "Message sent.",
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unable to send message.";
+      toast.error(msg);
+      replyInFlightRef.current = false;
+      return;
+    }
+
+    try {
+      if (shouldAutoAnalyze) {
+        await handleAnalyzeTicket();
+      }
+    } finally {
+      replyInFlightRef.current = false;
+    }
   };
 
   return (
     <>
       <Button variant="ghost" size="sm" asChild className="mb-5 px-2">
-        <Link to="/employee/tickets">
+        <Link to={backTo}>
           <ArrowRight className="rotate-180" />
           Back to tickets
         </Link>
@@ -515,12 +808,46 @@ export function TicketDetails({ id }: { id: string }) {
         eyebrow={`Ticket ${ticket.id}`}
         title={ticket.title}
         description="Request details and agentic support conversation for this ticket."
-        actions={<StatusBadge status={ticket.status} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={ticket.status} />
+            {showManualAnalyze && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleManualAnalyzeTicket}
+                disabled={isReplyBusy}
+                className="gap-1.5"
+              >
+                {analyzeMutation.isPending ? (
+                  <>
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-3.5" />
+                    Analyze with AI
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        }
       />
+
+      {analyzeMutation.isError && (
+        <div className="mb-5">
+          <LiveErrorBanner
+            title="AI analysis failed"
+            message={analyzeMutation.error?.message ?? "Please try again."}
+            onRetry={() => void handleAnalyzeTicket()}
+          />
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(310px,0.8fr)]">
         <div className="space-y-5">
-          {/* Request details with PII Masking Note (FR-01 to FR-04) */}
           <section className="rounded-md border border-border bg-card p-5 sm:p-6">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <SectionTitle title="Request details" detail={`Reported by ${ticket.employee}`} />
@@ -530,8 +857,7 @@ export function TicketDetails({ id }: { id: string }) {
               </span>
             </div>
             <p className="mt-3 whitespace-pre-line text-sm leading-7 text-muted-foreground">
-              {ticket.description ??
-                "My VPN connection drops every few minutes while I’m on calls. I’ve restarted the client, but the issue keeps coming back."}
+              {ticket.description}
             </p>
             <div className="mt-5 grid grid-cols-1 gap-4 border-t border-border pt-5 sm:grid-cols-2">
               <div>
@@ -555,7 +881,6 @@ export function TicketDetails({ id }: { id: string }) {
             </div>
           </section>
 
-          {/* Support Conversation & Clarification Thread (FR-08, FR-09, FR-17) */}
           <section className="rounded-md border border-border bg-card p-5 sm:p-6">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <SectionTitle
@@ -567,51 +892,71 @@ export function TicketDetails({ id }: { id: string }) {
               </span>
             </div>
 
-            {messages.length === 0 ? (
+            {messagesQuery.isLoading ? (
+              <div className="mt-4 space-y-3">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : messagesQuery.isError ? (
+              <div className="mt-4">
+                <LiveErrorBanner
+                  title="Unable to load messages"
+                  message={messagesQuery.error?.message ?? "Please try again."}
+                  onRetry={() => void messagesQuery.refetch()}
+                />
+              </div>
+            ) : messages.length === 0 ? (
               <EmptyState
                 icon={CircleHelp}
                 title="No conversation thread yet"
-                description="Agent questions or support replies will appear here once analysis commences."
+                description="Send a message or click Analyze with AI to start triage."
               />
             ) : (
               <div className="mt-4 space-y-4">
                 {messages.map((msg) => {
                   const isAgent = msg.sender === "agent";
+                  const isSupport = msg.sender === "human_support";
+                  const isIncoming = isAgent || isSupport;
                   return (
                     <div
                       key={msg.id}
                       className={`flex gap-3 ${
-                        isAgent ? "items-start" : "items-start flex-row-reverse"
+                        isIncoming ? "items-start" : "items-start flex-row-reverse"
                       }`}
                     >
                       <span
                         className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold ${
                           isAgent
                             ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
+                            : isSupport
+                              ? "bg-chart-2 text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
                         }`}
                       >
-                        {isAgent ? <Bot className="size-4" /> : "ML"}
+                        {isAgent ? <Bot className="size-4" /> : isSupport ? "SP" : userInitials}
                       </span>
                       <div
                         className={`max-w-[85%] rounded-lg p-3.5 text-xs sm:text-sm leading-relaxed ${
-                          isAgent
+                          isIncoming
                             ? "border border-border bg-muted/30 text-foreground"
                             : "bg-primary text-primary-foreground"
                         }`}
                       >
                         <div
                           className={`flex items-center gap-2 mb-1 text-[11px] font-semibold ${
-                            isAgent ? "text-primary" : "text-primary-foreground/80"
+                            isIncoming ? "text-primary" : "text-primary-foreground/80"
                           }`}
                         >
-                          <span>{isAgent ? "TriageAgent AI" : "Morgan Lee (You)"}</span>
+                          <span>
+                            {isAgent
+                              ? "TriageAgent AI"
+                              : isSupport
+                                ? "IT Support"
+                                : isOwner
+                                  ? `${currentUserLabel} (You)`
+                                  : ticket.employee}
+                          </span>
                           <span className="font-normal opacity-70">· {msg.created_at}</span>
-                          {msg.pii_masked && (
-                            <span className="ml-auto rounded bg-primary/20 px-1.5 py-0.2 text-[10px] uppercase font-bold text-primary">
-                              PII Protected
-                            </span>
-                          )}
                         </div>
                         <p className="whitespace-pre-line">{msg.message}</p>
                       </div>
@@ -621,9 +966,11 @@ export function TicketDetails({ id }: { id: string }) {
               </div>
             )}
 
-            {/* Clarification Input Box (FR-08, FR-09) */}
             {ticket.status !== "RESOLVED" && ticket.status !== "CLOSED" && (
-              <form onSubmit={handleSendClarification} className="mt-5 border-t border-border pt-4">
+              <form
+                onSubmit={(e) => void handleSendClarification(e)}
+                className="mt-5 border-t border-border pt-4"
+              >
                 <Label htmlFor="clarification-input" className="text-xs text-muted-foreground">
                   Reply to agent clarification or add missing details
                 </Label>
@@ -634,138 +981,176 @@ export function TicketDetails({ id }: { id: string }) {
                     onChange={(e) => setReplyText(e.target.value)}
                     placeholder="Provide additional details or answer the agent's questions..."
                     className="h-10 text-xs sm:text-sm"
-                    disabled={isSubmittingReply}
+                    disabled={isReplyBusy}
                   />
                   <Button
                     type="submit"
                     size="sm"
                     className="gap-1.5 shrink-0"
-                    disabled={isSubmittingReply || !replyText.trim()}
+                    disabled={isReplyBusy || !replyText.trim()}
                   >
                     <Send className="size-3.5" />
-                    <span>Send</span>
+                    <span>
+                      {sendMessageMutation.isPending
+                        ? "Sending..."
+                        : analyzeMutation.isPending
+                          ? "Analyzing..."
+                          : "Send"}
+                    </span>
                   </Button>
                 </div>
+                {analyzeMutation.isPending && (
+                  <p
+                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                    role="status"
+                  >
+                    <span className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    TriageAgent AI is reviewing your reply...
+                  </p>
+                )}
+                {sendMessageMutation.isError && (
+                  <p className="mt-2 text-xs text-destructive" role="alert">
+                    {sendMessageMutation.error?.message ?? "Unable to send message."}
+                  </p>
+                )}
               </form>
+            )}
+
+            {showResolutionActions && (
+              <div className="mt-4 flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">
+                    Did this resolve your issue?
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Confirm resolution to close the troubleshooting loop, or report that the issue
+                    continues.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void handleConfirmResolved()}
+                    disabled={isReplyBusy}
+                    className="gap-1.5"
+                  >
+                    <CheckCircle2 className="size-3.5" />
+                    {resolveMutation.isPending ? "Confirming..." : "Issue resolved"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleReportUnresolved()}
+                    disabled={isReplyBusy}
+                  >
+                    Still not resolved
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {(ticket.status === "RESOLVED" || ticket.status === "CLOSED") && (
+              <div
+                className="mt-4 flex items-center gap-2.5 rounded-md border border-primary/25 bg-primary/10 p-3.5 text-xs text-foreground"
+                role="status"
+              >
+                <CheckCircle2 className="size-4 shrink-0 text-primary" />
+                <span>
+                  This ticket is <strong>{ticket.status}</strong>. Full conversation history is
+                  preserved above.
+                </span>
+              </div>
             )}
           </section>
 
-          {/* Solution Suggestion & User Confirmation (FR-14, FR-19, FR-20) */}
-          {(ticket.status === "SOLUTION_SUGGESTED" || ticket.status === "RESOLVED") && (
-            <section className="rounded-md border border-chart-2/40 bg-chart-2/5 p-5 sm:p-6 space-y-4">
-              <div className="flex items-center gap-2 text-chart-2 font-semibold">
-                <Sparkles className="size-5" />
-                <h3>Knowledge-Grounded Solution</h3>
+          {latestAnalysis && (
+            <section className="rounded-md border border-chart-2/40 bg-chart-2/5 p-5 sm:p-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-chart-2 font-semibold">
+                  <Sparkles className="size-5" />
+                  <h3>Latest AI Analysis Result</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
+                      latestAnalysis.decision_source === "groq" ||
+                      latestAnalysis.decision_source === "fallback"
+                        ? "border-chart-3/40 bg-chart-3/15 text-foreground"
+                        : "border-primary/25 bg-primary/10 text-primary"
+                    }`}
+                  >
+                    {latestAnalysis.decision_source === "groq"
+                      ? "Fallback analysis – Groq (Gemini unavailable)"
+                      : latestAnalysis.decision_source === "fallback"
+                        ? "Fallback analysis – Gemini API quota exceeded."
+                        : latestAnalysis.decision_source === "rule"
+                          ? "Automated rule-based escalation"
+                          : "Analyzed by Gemini"}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {latestAnalysis.latency_ms} ms
+                  </span>
+                </div>
               </div>
-              <p className="text-xs sm:text-sm leading-6 text-foreground">
-                The agent evaluated matching documentation from ChromaDB RAG (Score: 0.95) and
-                synthesized the verified resolution steps above.
+              <p className="whitespace-pre-line text-xs sm:text-sm leading-6 text-foreground">
+                {latestAnalysis.response}
               </p>
-
-              {ticket.status !== "RESOLVED" ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-border bg-card p-4">
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-semibold">
-                      Did this solve your problem?
-                    </h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Confirming resolution officially closes the ticket.
-                    </p>
-                  </div>
-                  <Button onClick={handleConfirmResolution} className="gap-1.5 shrink-0">
-                    <Check className="size-4" />
-                    Confirm Resolution
-                  </Button>
-                </div>
-              ) : (
-                <div className="rounded-md border border-primary/20 bg-primary/10 p-4">
-                  <div className="flex items-center gap-2 text-primary text-sm font-semibold">
-                    <CheckCircle2 className="size-4" />
-                    <span>Ticket confirmed RESOLVED by employee</span>
-                  </div>
-
-                  {!feedbackSubmitted ? (
-                    <div className="mt-3 pt-3 border-t border-primary/20 space-y-2">
-                      <p className="text-xs text-muted-foreground">
-                        Rate this resolution (FR-19 Feedback):
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => setRating(s)}
-                            className="p-1 hover:scale-110 transition-transform"
-                          >
-                            <Star
-                              className={`size-4 ${
-                                s <= rating ? "text-chart-4 fill-chart-4" : "text-muted-foreground"
-                              }`}
-                            />
-                          </button>
-                        ))}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleFeedbackSubmit}
-                          className="ml-3 h-7 text-xs"
-                        >
-                          Submit Rating
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      ★ Feedback submitted. Thank you for helping improve our AI triage models!
-                    </p>
-                  )}
-                </div>
+              {latestAnalysis.escalation_reason && (
+                <p className="text-xs font-medium text-destructive">
+                  Escalation reason: {latestAnalysis.escalation_reason}
+                </p>
               )}
             </section>
           )}
         </div>
 
-        {/* Sidebar Activity & Status (FR-06, FR-15, FR-16) */}
         <div className="space-y-5">
           <section className="rounded-md border border-border bg-card p-5 sm:p-6 space-y-4">
             <SectionTitle
               title="Agent Risk & Triage"
-              detail="Independent assessment from LangGraph context node."
+              detail="Assessment from LangGraph triage workflow."
             />
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Assessed Urgency Risk</span>
                 <span
                   className={`font-semibold ${
-                    ticket.risk === "High"
+                    ticket.risk === "Critical" || ticket.risk === "High"
                       ? "text-destructive"
-                      : ticket.risk === "Medium"
-                        ? "text-chart-4"
-                        : "text-primary"
+                      : "text-primary"
                   }`}
                 >
-                  {ticket.risk ?? "Low"} Risk
+                  {ticket.risk ? `${ticket.risk} Risk` : "Not assessed"}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Agent Decision</span>
                 <span className="font-semibold text-foreground">
-                  {ticket.final_decision ?? "ANALYZING"}
+                  {ticket.final_decision ?? "Pending analysis"}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Assigned Human Team</span>
-                <span className="font-semibold text-foreground">
-                  {ticket.team ?? "AI Auto-Triage"}
-                </span>
-              </div>
+              {latestAnalysis?.confidence !== null && latestAnalysis?.confidence !== undefined && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Confidence</span>
+                  <span className="font-semibold text-foreground">
+                    {Math.round(latestAnalysis.confidence * 100)}%
+                  </span>
+                </div>
+              )}
+              {ticket.status === "ESCALATED" && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+                  Escalated to human IT support for review.
+                </div>
+              )}
             </div>
           </section>
 
           <section className="rounded-md border border-border bg-card p-5 sm:p-6">
             <SectionTitle
               title="Ticket Timeline"
-              detail="State transitions across the SDLC lifecycle."
+              detail="State transitions across the support lifecycle."
             />
             <div className="mt-4 space-y-3 text-xs">
               <div className="flex items-start gap-2.5">
@@ -775,19 +1160,12 @@ export function TicketDetails({ id }: { id: string }) {
                   <p className="text-muted-foreground">{ticket.created}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-2.5">
-                <span className="size-2 rounded-full bg-chart-4 mt-1.5" />
-                <div>
-                  <p className="font-medium text-foreground">ANALYZING &bull; Context evaluated</p>
-                  <p className="text-muted-foreground">PII masked, risk calculated</p>
-                </div>
-              </div>
-              {ticket.status === "WAITING_FOR_USER" && (
+              {ticket.final_decision && (
                 <div className="flex items-start gap-2.5">
-                  <span className="size-2 rounded-full bg-chart-3 mt-1.5" />
+                  <span className="size-2 rounded-full bg-chart-4 mt-1.5" />
                   <div>
                     <p className="font-medium text-foreground">
-                      WAITING_FOR_USER &bull; Clarification asked
+                      AI Triage &bull; {ticket.final_decision}
                     </p>
                     <p className="text-muted-foreground">{ticket.updated}</p>
                   </div>
@@ -798,7 +1176,7 @@ export function TicketDetails({ id }: { id: string }) {
                   <span className="size-2 rounded-full bg-destructive mt-1.5" />
                   <div>
                     <p className="font-medium text-foreground">
-                      ESCALATED &bull; Assigned to {ticket.team}
+                      ESCALATED &bull; Assigned to IT Support
                     </p>
                     <p className="text-muted-foreground">{ticket.updated}</p>
                   </div>
@@ -808,76 +1186,314 @@ export function TicketDetails({ id }: { id: string }) {
                 <div className="flex items-start gap-2.5">
                   <span className="size-2 rounded-full bg-primary mt-1.5" />
                   <div>
-                    <p className="font-medium text-foreground">RESOLVED &bull; User confirmed</p>
-                    <p className="text-muted-foreground">Just now</p>
+                    <p className="font-medium text-foreground">RESOLVED</p>
+                    <p className="text-muted-foreground">{ticket.updated}</p>
+                  </div>
+                </div>
+              )}
+              {ticket.status === "CLOSED" && (
+                <div className="flex items-start gap-2.5">
+                  <span className="size-2 rounded-full bg-chart-2 mt-1.5" />
+                  <div>
+                    <p className="font-medium text-foreground">CLOSED</p>
+                    <p className="text-muted-foreground">{ticket.updated}</p>
                   </div>
                 </div>
               )}
             </div>
           </section>
+
+          {isStaffView && (
+            <StaffTicketControls
+              ticketId={id}
+              ticketStatus={ticket.status}
+              role={role as "admin" | "support"}
+            />
+          )}
         </div>
       </div>
     </>
   );
 }
 
+function StaffTicketControls({
+  ticketId,
+  ticketStatus,
+  role,
+}: {
+  ticketId: string;
+  ticketStatus: TicketStatus;
+  role: "admin" | "support";
+}) {
+  const escalationQuery = useTicketEscalation(ticketId, true);
+  const agentRunsQuery = useTicketAgentRuns(ticketId, true);
+  const staffQuery = useStaffAssignees();
+  const assignMutation = useAssignEscalation();
+  const updateStatusMutation = useUpdateTicketStatus(ticketId);
+
+  const [selectedAssignee, setSelectedAssignee] = useState<string>("");
+  const [selectedStatus, setSelectedStatus] = useState<TicketStatus>(ticketStatus);
+
+  useEffect(() => {
+    setSelectedStatus(ticketStatus);
+  }, [ticketStatus]);
+
+  const isClosed = ticketStatus === "CLOSED";
+
+  const escalation = escalationQuery.data;
+  const agentRuns = agentRunsQuery.data ?? [];
+  const staffList = staffQuery.data ?? [];
+
+  const handleAssign = async () => {
+    if (!escalation || !selectedAssignee || assignMutation.isPending) return;
+    try {
+      await assignMutation.mutateAsync({
+        escalationId: escalation.id,
+        ticketId,
+        payload: { assigned_to: selectedAssignee },
+      });
+      toast.success("Escalation assigned.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to assign escalation.");
+    }
+  };
+
+  const handleStatusChange = async (nextStatus: TicketStatus) => {
+    if (updateStatusMutation.isPending) return;
+    try {
+      await updateStatusMutation.mutateAsync({ status: nextStatus });
+      setSelectedStatus(nextStatus);
+      toast.success(`Ticket status updated to ${nextStatus}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to update ticket status.");
+    }
+  };
+
+  return (
+    <>
+      <section className="rounded-md border border-border bg-card p-5 sm:p-6 space-y-4">
+        <SectionTitle
+          title="Operations & Status"
+          detail="Manage ticket lifecycle and escalation assignment."
+        />
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Update ticket status</Label>
+            <div className="flex gap-2">
+              <Select
+                value={selectedStatus}
+                onValueChange={(value) => setSelectedStatus(value as TicketStatus)}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ticketStatuses.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {statusLabels[item]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  isClosed || updateStatusMutation.isPending || selectedStatus === ticketStatus
+                }
+                onClick={() => void handleStatusChange(selectedStatus)}
+              >
+                {updateStatusMutation.isPending ? "Saving..." : "Update"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            {ticketStatus !== "RESOLVED" && ticketStatus !== "CLOSED" && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={updateStatusMutation.isPending}
+                onClick={() => void handleStatusChange("RESOLVED")}
+              >
+                Mark resolved
+              </Button>
+            )}
+            {ticketStatus !== "CLOSED" && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={updateStatusMutation.isPending}
+                onClick={() => void handleStatusChange("CLOSED")}
+              >
+                Close ticket
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {escalation && (
+          <div className="space-y-3 border-t border-border pt-4 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Escalation status</span>
+              <span className="font-semibold text-foreground">{escalation.status}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Assigned team</span>
+              <span className="font-medium text-foreground">
+                {escalation.assigned_team ?? "IT Support"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Assigned technician</span>
+              <span className="font-medium text-foreground">
+                {escalation.assigned_to_name ?? "Unassigned"}
+              </span>
+            </div>
+            <p className="rounded-md border border-border bg-muted/40 p-2.5 text-muted-foreground">
+              <strong className="text-foreground">Reason:</strong> {escalation.reason}
+            </p>
+
+            {role === "admin" && (
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-xs text-muted-foreground">Assign technician</Label>
+                <div className="flex gap-2">
+                  <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Select technician" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {staffList.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.full_name} ({member.role})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={assignMutation.isPending || !selectedAssignee}
+                    onClick={() => void handleAssign()}
+                  >
+                    {assignMutation.isPending ? "Assigning..." : "Assign"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-md border border-border bg-card p-5 sm:p-6 space-y-3">
+        <SectionTitle
+          title="Agent Run History"
+          detail={`${agentRuns.length} recorded run(s) in agent_runs.`}
+        />
+        {agentRunsQuery.isLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : agentRuns.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No AI runs recorded for this ticket yet.</p>
+        ) : (
+          <div className="space-y-2.5 text-xs">
+            {agentRuns.map((run) => (
+              <div
+                key={run.id}
+                className="rounded-md border border-border bg-muted/30 p-2.5 space-y-1"
+              >
+                <div className="flex items-center justify-between font-medium text-foreground">
+                  <span>{run.decision}</span>
+                  <span className="font-mono text-muted-foreground">
+                    {run.latency_ms !== null ? `${run.latency_ms} ms` : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    Confidence:{" "}
+                    {run.confidence !== null ? `${Math.round(run.confidence * 100)}%` : "—"}
+                    {run.retrieval_score !== null
+                      ? ` · KB: ${Math.round(run.retrieval_score * 100)}%`
+                      : ""}
+                  </span>
+                  <span>{new Date(run.created_at).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
 export function EmployeeProfile() {
+  const navigate = useNavigate();
+  const { user, fullName, role, signOut } = useAuth();
+  const displayName = fullName ?? user?.email ?? "Employee";
+  const initials = getInitials(displayName);
+  const memberSince = (() => {
+    if (!user?.created_at) return "—";
+    const parsed = parseISO(user.created_at);
+    return isValid(parsed) ? format(parsed, "MMMM yyyy") : "—";
+  })();
+
+  const handleSignOut = async () => {
+    await signOut();
+    await navigate({ to: "/login" });
+  };
+
   return (
     <>
       <PageHeading
         eyebrow="Account"
         title="My profile"
-        description="Your employee account details for this preview workspace."
+        description="Your authenticated employee account details."
       />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,0.7fr)]">
         <section className="rounded-md border border-border bg-card p-5 sm:p-7">
           <div className="flex items-center gap-4 border-b border-border pb-6">
             <span className="grid size-14 place-items-center rounded-full bg-accent text-base font-semibold text-accent-foreground">
-              ML
+              {initials}
             </span>
             <div>
-              <h2 className="font-semibold">Morgan Lee</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Employee account · Preview</p>
+              <h2 className="font-semibold">{displayName}</h2>
+              <p className="mt-1 text-sm text-muted-foreground capitalize">
+                {role ?? "employee"} account
+              </p>
             </div>
           </div>
           <dl className="grid grid-cols-1 gap-x-8 gap-y-5 pt-6 sm:grid-cols-2">
             <div>
               <dt className="text-xs text-muted-foreground">Full name</dt>
-              <dd className="mt-1 text-sm font-medium">Morgan Lee</dd>
+              <dd className="mt-1 text-sm font-medium">{fullName ?? "Not set"}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Email address</dt>
-              <dd className="mt-1 break-all text-sm font-medium">morgan.lee@example.com</dd>
+              <dd className="mt-1 break-all text-sm font-medium">{user?.email ?? "—"}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Account role</dt>
-              <dd className="mt-1 text-sm font-medium">Employee</dd>
+              <dd className="mt-1 text-sm font-medium capitalize">{role ?? "employee"}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Member since</dt>
-              <dd className="mt-1 text-sm font-medium">September 2025</dd>
+              <dd className="mt-1 text-sm font-medium">{memberSince}</dd>
             </div>
           </dl>
         </section>
         <div className="space-y-4">
-          <PreviewNotice>
-            This profile represents sample employee credentials. Use the session controls below to
-            test sign-in or register another profile.
-          </PreviewNotice>
           <section className="rounded-md border border-border bg-card p-5">
             <h2 className="text-sm font-semibold">Account session</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              You are currently viewing the workspace as Morgan Lee.
+              Signed in as {displayName}.
             </p>
             <div className="mt-4 flex flex-wrap gap-2.5">
-              <Button variant="outline" size="sm" asChild>
-                <Link to="/login">
-                  <LogOut className="mr-1.5 size-3.5" />
-                  Sign out
-                </Link>
-              </Button>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/register">Create new account</Link>
+              <Button variant="outline" size="sm" onClick={() => void handleSignOut()}>
+                <LogOut className="mr-1.5 size-3.5" />
+                Sign out
               </Button>
             </div>
           </section>
@@ -944,7 +1560,7 @@ export function TicketListEmpty() {
   return (
     <EmptyState
       title="No tickets yet"
-      description="Your support requests will appear here when a ticket service is connected."
+      description="Create your first support request to get started."
       action={
         <Button asChild>
           <Link to="/employee/tickets/new">

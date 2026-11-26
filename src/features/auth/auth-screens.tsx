@@ -19,6 +19,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { getHomeRouteForRole } from "@/components/protected-route";
+import { useAuth } from "@/hooks/use-auth";
+import { fetchTrustedProfile } from "@/lib/auth-helpers";
+import { supabase } from "@/lib/supabase";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -80,15 +85,17 @@ function AuthHeader({ subtitle, badge }: { subtitle: string; badge?: string }) {
 }
 
 // ----------------------------------------------------------------------------
-// 1. Employee Login Screen
+// 1. Employee Login Screen (also routes Support and Admin to their workspaces)
 // ----------------------------------------------------------------------------
 export function EmployeeLoginScreen() {
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSubmitted, setResetSubmitted] = useState(false);
@@ -96,43 +103,76 @@ export function EmployeeLoginScreen() {
   const handleDemoFill = () => {
     setEmail("morgan.lee@example.com");
     setPassword("SupportPass2026!");
-    toast.info("Demo credentials loaded for Morgan Lee (Employee).");
+    setAuthError(null);
+    toast.info("Sample credentials loaded into form. Enter real account credentials to sign in.");
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      toast.error("Please provide both email and password.");
+    setAuthError(null);
+
+    if (!email.trim() || !password) {
+      const msg = "Please provide both email and password.";
+      setAuthError(msg);
+      toast.error(msg);
       return;
     }
 
     setIsLoading(true);
-    // Frontend simulated authentication delay
-    setTimeout(() => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error || !data.user) {
+        const msg = error?.message || "Invalid email or password.";
+        setAuthError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      const profile = await fetchTrustedProfile(data.user.id);
+      if (profile.error || !profile.role) {
+        await supabase.auth.signOut();
+        const msg = profile.error ?? "User profile not found. Access denied.";
+        setAuthError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      await refreshProfile();
+      const displayName = profile.fullName ?? data.user.email ?? "User";
+      toast.success(`Welcome back, ${displayName}!`);
+      await navigate({ to: getHomeRouteForRole(profile.role) });
+    } catch {
+      const msg = "Unable to complete sign-in. Please try again.";
+      setAuthError(msg);
+      toast.error(msg);
+    } finally {
       setIsLoading(false);
-      toast.success("Welcome back, Morgan! Logged into Employee Workspace.");
-      navigate({ to: "/employee/dashboard" });
-    }, 700);
+    }
   };
 
   const handleSsoLogin = (provider: string) => {
-    setIsLoading(true);
-    toast.info(`Connecting to ${provider} Single Sign-On...`);
-    setTimeout(() => {
-      setIsLoading(false);
-      toast.success(`Authenticated via ${provider} SSO.`);
-      navigate({ to: "/employee/dashboard" });
-    }, 900);
+    toast.info(
+      `${provider} Single Sign-On is not configured for this workspace. Please sign in with email and password.`,
+    );
   };
 
-  const handleForgotPasswordSubmit = (e: React.FormEvent) => {
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resetEmail) {
+    if (!resetEmail.trim()) {
       toast.error("Please enter your account email address.");
       return;
     }
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim());
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setResetSubmitted(true);
-    toast.success("Reset link sent! Please check your inbox.");
+    toast.success("Password reset instructions sent! Please check your inbox.");
   };
 
   return (
@@ -161,6 +201,15 @@ export function EmployeeLoginScreen() {
           </CardHeader>
 
           <CardContent className="space-y-4">
+            {authError && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+              >
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="employee-email">Work Email</Label>
@@ -291,9 +340,8 @@ export function EmployeeLoginScreen() {
           </CardFooter>
         </Card>
 
-        {/* Demo Mode Disclaimer */}
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Frontend preview mode · Demonstrating employee sign-in experience
+          Secured by Supabase Authentication · Employee &amp; Support Portal
         </p>
       </div>
 
@@ -357,6 +405,7 @@ export function EmployeeLoginScreen() {
 // ----------------------------------------------------------------------------
 export function RegisterScreen() {
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [department, setDepartment] = useState("Engineering");
@@ -365,6 +414,7 @@ export function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Password strength calculator
   const hasMinLength = password.length >= 8;
@@ -380,34 +430,114 @@ export function RegisterScreen() {
     setPassword("OrbitSecure#2026");
     setConfirmPassword("OrbitSecure#2026");
     setTermsAccepted(true);
+    setAuthError(null);
     toast.info("Sample registration data prefilled.");
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !email || !password || !confirmPassword) {
-      toast.error("Please complete all required fields.");
+    setAuthError(null);
+
+    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
+      const msg = "Please complete all required fields.";
+      setAuthError(msg);
+      toast.error(msg);
       return;
     }
     if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
+      const msg = "Passwords do not match.";
+      setAuthError(msg);
+      toast.error(msg);
       return;
     }
     if (password.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+      const msg = "Password must be at least 8 characters.";
+      setAuthError(msg);
+      toast.error(msg);
       return;
     }
     if (!termsAccepted) {
-      toast.error("Please accept the terms of service to continue.");
+      const msg = "Please accept the terms of service to continue.";
+      setAuthError(msg);
+      toast.error(msg);
       return;
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const trimmedEmail = email.trim();
+      const trimmedName = fullName.trim();
+
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: {
+          data: {
+            full_name: trimmedName,
+            department,
+          },
+        },
+      });
+
+      if (error || !data.user) {
+        const msg = error?.message || "Unable to complete registration.";
+        setAuthError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      if (!data.session) {
+        toast.success(
+          `Account created for ${trimmedName}! Please check your email to confirm your account, then sign in.`,
+        );
+        await navigate({ to: "/login" });
+        return;
+      }
+
+      // Check whether a database trigger already created the profiles row to avoid duplicates.
+      const existingProfile = await fetchTrustedProfile(data.user.id);
+      if (existingProfile.error && existingProfile.error !== "User profile not found.") {
+        await supabase.auth.signOut();
+        setAuthError(existingProfile.error);
+        toast.error(existingProfile.error);
+        return;
+      }
+
+      if (existingProfile.error === "User profile not found.") {
+        const { error: insertError } = await supabase.from("profiles").insert({
+          id: data.user.id,
+          full_name: trimmedName,
+          role: "employee",
+        });
+
+        if (insertError) {
+          await supabase.auth.signOut();
+          const msg = "Account created, but profile setup failed. Please contact support.";
+          setAuthError(msg);
+          toast.error(msg);
+          return;
+        }
+      }
+
+      const verifiedProfile = await fetchTrustedProfile(data.user.id);
+      if (verifiedProfile.error || !verifiedProfile.role) {
+        await supabase.auth.signOut();
+        const msg = verifiedProfile.error ?? "Unable to verify new profile.";
+        setAuthError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      await refreshProfile();
+      toast.success(`Account registered for ${trimmedName}!`);
+      await navigate({ to: getHomeRouteForRole(verifiedProfile.role) });
+    } catch {
+      const msg = "Unable to complete registration. Please try again.";
+      setAuthError(msg);
+      toast.error(msg);
+    } finally {
       setIsLoading(false);
-      toast.success(`Account registered for ${fullName}! Routing to dashboard...`);
-      navigate({ to: "/employee/dashboard" });
-    }, 800);
+    }
   };
 
   return (
@@ -436,6 +566,15 @@ export function RegisterScreen() {
           </CardHeader>
 
           <CardContent className="space-y-4">
+            {authError && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+              >
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
             <form onSubmit={handleRegister} className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
@@ -619,7 +758,7 @@ export function RegisterScreen() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Frontend preview mode · Illustrative registration flow
+          Secured by Supabase Authentication · Employee Registration
         </p>
       </div>
     </div>
@@ -627,43 +766,91 @@ export function RegisterScreen() {
 }
 
 // ----------------------------------------------------------------------------
-// 3. Admin Login Screen
+// 3. Admin / Support Login Screen
 // ----------------------------------------------------------------------------
 export function AdminLoginScreen() {
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [enable2FA, setEnable2FA] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleDemoFill = () => {
     setAdminEmail("casey.morgan@example.com");
     setAdminPassword("SecOps#Master99");
     setTwoFactorCode("847291");
     setEnable2FA(true);
-    toast.info("Demo credentials loaded for Casey Morgan (IT Administrator).");
+    setAuthError(null);
+    toast.info(
+      "Sample credentials loaded into form. Enter real admin/support credentials to sign in.",
+    );
   };
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminEmail || !adminPassword) {
-      toast.error("Please enter administrator credentials.");
+    setAuthError(null);
+
+    if (!adminEmail.trim() || !adminPassword) {
+      const msg = "Please enter administrator or support credentials.";
+      setAuthError(msg);
+      toast.error(msg);
       return;
     }
 
     if (enable2FA && twoFactorCode.trim().length < 6) {
-      toast.error("Please provide the 6-digit security verification code.");
+      const msg = "Please provide the 6-digit security verification code.";
+      setAuthError(msg);
+      toast.error(msg);
       return;
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: adminEmail.trim(),
+        password: adminPassword,
+      });
+
+      if (error || !data.user) {
+        const msg = error?.message || "Invalid administrator credentials.";
+        setAuthError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      const profile = await fetchTrustedProfile(data.user.id);
+      if (profile.error || !profile.role) {
+        await supabase.auth.signOut();
+        const msg = profile.error ?? "User profile not found. Access denied.";
+        setAuthError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      if (profile.role !== "admin" && profile.role !== "support") {
+        await supabase.auth.signOut();
+        const msg =
+          "Insufficient permissions. Operations console is restricted to support and admin roles.";
+        setAuthError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      await refreshProfile();
+      const displayName = profile.fullName ?? data.user.email ?? "Operator";
+      toast.success(`Security clearances verified. Welcome, ${displayName}!`);
+      await navigate({ to: getHomeRouteForRole(profile.role) });
+    } catch {
+      const msg = "Unable to verify credentials. Please try again.";
+      setAuthError(msg);
+      toast.error(msg);
+    } finally {
       setIsLoading(false);
-      toast.success("Administrator security clearances verified. Welcome Casey!");
-      navigate({ to: "/admin/dashboard" });
-    }, 750);
+    }
   };
 
   return (
@@ -709,6 +896,16 @@ export function AdminLoginScreen() {
                 audited.
               </p>
             </div>
+
+            {authError && (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+              >
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div className="space-y-2">
@@ -829,7 +1026,7 @@ export function AdminLoginScreen() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Frontend preview mode · Illustrative admin authentication barrier
+          Secured by Supabase Authentication · Support &amp; Admin Console
         </p>
       </div>
     </div>
